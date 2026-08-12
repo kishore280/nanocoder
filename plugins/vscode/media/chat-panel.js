@@ -143,8 +143,8 @@
 	const historyList = document.getElementById('history-list');
 
 	let currentTurnEl = null;
-	let currentTextEl = null;
 	let currentTurnText = '';
+	let currentTurnRenderer = null;
 	let renderTimeout = null;
 	let sessionsData = [];
 	let isHistoryView = false;
@@ -251,7 +251,7 @@
 	function setProcessing(active) {
 		isProcessing = active;
 		if (!active) {
-			// Globally cancel any stuck spinners across all tool cards, 
+			// Globally cancel any stuck spinners across all tool cards,
 			// in case multiple aggregators were created in the same session
 			const allSpinners = document.querySelectorAll('.tool-status');
 			allSpinners.forEach(statusEl => {
@@ -264,6 +264,13 @@
 				currentAggregator.close();
 			}
 			currentAggregator = null;
+
+			// shared by both cancel and normal completion
+			if (currentThoughtBox) {
+				currentThoughtBox.finish();
+				currentThoughtBox = null;
+			}
+			endCurrentTextBlock();
 		}
 		if (sendStopBtn) {
 			sendStopBtn.title = active ? 'Stop (cancel)' : 'Send (Enter)';
@@ -520,8 +527,9 @@
 			setProcessing(true);
 
 			// Reset turn elements so agent starts a fresh block
+			if (currentTurnRenderer) currentTurnRenderer.container.classList.remove('is-streaming');
 			currentTurnEl = null;
-			currentTextEl = null;
+			currentTurnRenderer = null;
 		}
 	}
 
@@ -779,7 +787,13 @@
 			if (role === 'agent') textContainer.dataset.turnId = String(agentTurnId);
 
 			if (typeof marked !== 'undefined') {
-				textContainer.innerHTML = marked.parse(parsedContent);
+				if (role === 'agent') {
+					currentTurnRenderer = new IncrementalMarkdownRenderer(textContainer);
+					currentTurnRenderer.update(parsedContent);
+				} else {
+					textContainer.innerHTML = marked.parse(parsedContent);
+					highlightCodeBlocks(textContainer);
+				}
 			} else {
 				textContainer.textContent = parsedContent;
 			}
@@ -842,8 +856,9 @@
 			closeAgentSegment();
 			beginAgentSegment();
 			currentTurnEl = msgEl;
-			currentTextEl = textContainer;
 			currentTurnText = content;
+			// no content means no textContainer was built, drop any stale renderer
+			if (!textContainer) currentTurnRenderer = null;
 			syncLastAgentRawText();
 		}
 	}
@@ -855,7 +870,7 @@
 		const loader = document.getElementById('session-loader');
 		if (loader) loader.remove();
 
-		if (!currentTurnEl || !currentTextEl) {
+		if (!currentTurnEl || !currentTurnRenderer) {
 			// First chunk for this turn
 			const wrapper = document.createElement('div');
 			wrapper.className = 'group flex flex-col min-w-0 self-start items-start max-w-full';
@@ -868,10 +883,12 @@
 			textContainer.dataset.turnId = String(agentTurnId);
 			beginAgentSegment();
 			currentTurnText = textChunk;
+			currentTurnRenderer = new IncrementalMarkdownRenderer(textContainer);
 			syncLastAgentRawText();
 
 			if (typeof marked !== 'undefined') {
-				textContainer.innerHTML = marked.parse(currentTurnText);
+				textContainer.classList.add('is-streaming');
+				currentTurnRenderer.update(currentTurnText);
 			} else {
 				textContainer.textContent = currentTurnText;
 			}
@@ -883,7 +900,6 @@
 			messagesContainer.appendChild(wrapper);
 
 			currentTurnEl = msgEl;
-			currentTextEl = textContainer;
 			scrollToBottom();
 		} else {
 			// Append to existing turn
@@ -896,15 +912,15 @@
 			if (typeof marked !== 'undefined') {
 				if (!renderTimeout) {
 					renderTimeout = setTimeout(() => {
-						if (currentTextEl) {
-							currentTextEl.innerHTML = marked.parse(currentTurnText);
+						if (currentTurnRenderer) {
+							currentTurnRenderer.update(currentTurnText);
 						}
 						renderTimeout = null;
 						scrollToBottom();
 					}, 50); // 50ms throttle (20 updates/sec max) for smoother rendering
 				}
 			} else {
-				currentTextEl.textContent += textChunk; // Fallback
+				currentTurnRenderer.container.textContent += textChunk; // Fallback
 				scrollToBottom();
 			}
 		}
@@ -916,6 +932,42 @@
 
 	function scrollToBottom() {
 		messagesContainer.scrollTop = messagesContainer.scrollHeight;
+	}
+
+	function highlightCodeBlocks(root) {
+		if (typeof hljs === 'undefined' || !root) return;
+		root.querySelectorAll('pre code').forEach(block => {
+			hljs.highlightElement(block);
+		});
+	}
+
+	class IncrementalMarkdownRenderer {
+		constructor(container) {
+			this.container = container;
+			this.blocks = [];
+		}
+
+		update(text) {
+			if (typeof marked === 'undefined') return;
+			const tokens = marked.lexer(text);
+			for (let i = 0; i < tokens.length; i++) {
+				const raw = tokens[i].raw;
+				if (this.blocks[i] && this.blocks[i].raw === raw) continue;
+				let el = this.blocks[i] && this.blocks[i].el;
+				if (!el) {
+					el = document.createElement('div');
+					el.className = 'markdown-block';
+					this.container.appendChild(el);
+				}
+				el.innerHTML = marked.parser([tokens[i]]);
+				highlightCodeBlocks(el);
+				this.blocks[i] = { raw, el };
+			}
+			while (this.blocks.length > tokens.length) {
+				const stale = this.blocks.pop();
+				if (stale && stale.el) stale.el.remove();
+			}
+		}
 	}
 
 	// --- Copy last code block ---
@@ -950,8 +1002,8 @@
 		if (!renderTimeout) return;
 		clearTimeout(renderTimeout);
 		renderTimeout = null;
-		if (currentTextEl && typeof marked !== 'undefined') {
-			currentTextEl.innerHTML = marked.parse(currentTurnText);
+		if (currentTurnRenderer && typeof marked !== 'undefined') {
+			currentTurnRenderer.update(currentTurnText);
 		}
 	}
 
@@ -1068,7 +1120,7 @@
 					messagesContainer.innerHTML = '';
 				}
 				currentTurnEl = null;
-				currentTextEl = null;
+				currentTurnRenderer = null;
 				currentTurnText = '';
 				agentTurnId = 0;
 				lastAgentRawTurnId = -1;
@@ -1282,9 +1334,10 @@
 	// and post-tool output into one paragraph.
 	function endCurrentTextBlock() {
 		flushPendingRender();
+		if (currentTurnRenderer) currentTurnRenderer.container.classList.remove('is-streaming');
 		closeAgentSegment();
 		currentTurnEl = null;
-		currentTextEl = null;
+		currentTurnRenderer = null;
 		syncLastAgentRawText();
 	}
 
@@ -1328,10 +1381,7 @@
 		} else if (update.sessionUpdate === 'plan') {
 			handlePlanUpdate(update);
 		} else if (update.sessionUpdate === 'prompt_response' || update.sessionUpdate === 'done') {
-			if (currentThoughtBox) {
-				currentThoughtBox.finish();
-				currentThoughtBox = null;
-			}
+			endCurrentTextBlock();
 			// Show token usage (and estimated cost) for the finished turn
 			appendUsageIndicator(update.usage, update.cost);
 			// Turn is complete — restore the send button
@@ -1362,12 +1412,13 @@
 			this.el.appendChild(this.header);
 
 			this.body = document.createElement('div');
-			this.body.className = 'mt-2 pl-3 border-l-[3px] border-vscode-border opacity-70 text-vscode-fg markdown-body text-[0.95em]';
+			this.body.className = 'mt-2 pl-3 border-l-[3px] border-vscode-border opacity-70 text-vscode-fg markdown-body text-[0.95em] is-streaming';
 			this.el.appendChild(this.body);
 
 			this.isOpen = true;
 			this.startTime = Date.now();
 			this.text = '';
+			this.renderer = new IncrementalMarkdownRenderer(this.body);
 			this.renderTimeout = null;
 
 			this.timer = setInterval(() => this.updateTimer(), 1000);
@@ -1396,7 +1447,7 @@
 			if (typeof marked !== 'undefined') {
 				if (!this.renderTimeout) {
 					this.renderTimeout = setTimeout(() => {
-						this.body.innerHTML = marked.parse(this.text);
+						this.renderer.update(this.text);
 						this.renderTimeout = null;
 						scrollToBottom();
 					}, 50);
@@ -1413,9 +1464,8 @@
 				clearTimeout(this.renderTimeout);
 				this.renderTimeout = null;
 			}
-			if (typeof marked !== 'undefined') {
-				this.body.innerHTML = marked.parse(this.text);
-			}
+			this.body.classList.remove('is-streaming');
+			this.renderer.update(this.text);
 			const seconds = Math.floor((Date.now() - this.startTime) / 1000);
 			this.title.textContent = `Thought for ${seconds}s`;
 			this.toggle(false); // Auto-shrink when done!

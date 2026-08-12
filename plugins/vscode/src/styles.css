@@ -57,6 +57,15 @@ select option {
 .markdown-body p:last-child {
   margin-bottom: 0;
 }
+.markdown-body > .markdown-block {
+  margin-bottom: 0.5em;
+}
+.markdown-body > .markdown-block:last-child {
+  margin-bottom: 0;
+}
+.markdown-body > .markdown-block p {
+  margin-bottom: 0;
+}
 .markdown-body strong {
   font-weight: 600;
 }
@@ -101,6 +110,35 @@ select option {
 .markdown-body h1 { font-size: 1.5em; }
 .markdown-body h2 { font-size: 1.3em; }
 .markdown-body h3 { font-size: 1.1em; }
+
+/* ── Code Syntax Highlighting ───────────────────────── */
+.hljs-comment, .hljs-quote { color: var(--vscode-editor-foreground); opacity: 0.6; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-subst, .hljs-tag, .hljs-tag .hljs-name { color: var(--vscode-textLink-foreground); }
+.hljs-literal, .hljs-doctag { color: var(--vscode-debugTokenExpression-boolean); }
+.hljs-string, .hljs-regexp { color: var(--vscode-debugTokenExpression-string); }
+.hljs-number { color: var(--vscode-debugTokenExpression-number); }
+.hljs-title, .hljs-title.function_, .hljs-section, .hljs-selector-id, .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-params, .hljs-tag .hljs-attr { color: var(--vscode-debugTokenExpression-name); }
+.hljs-type, .hljs-class .hljs-title, .hljs-built_in, .hljs-builtin-name { color: var(--vscode-debugTokenExpression-type); }
+.hljs-meta { color: var(--vscode-debugTokenExpression-value); }
+.hljs-deletion { background: var(--vscode-diffEditor-removedTextBackground); }
+.hljs-addition { background: var(--vscode-diffEditor-insertedTextBackground); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+
+/* ── Streaming Cursor ───────────────────────────────── */
+.markdown-body.is-streaming > .markdown-block:last-child > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background: currentColor;
+  vertical-align: text-bottom;
+  animation: stream-cursor-blink 1s step-start infinite;
+}
+@keyframes stream-cursor-blink {
+  50% { opacity: 0; }
+}
 
 /* ── Context Chip ───────────────────────────────────── */
 .context-chip {

@@ -159,12 +159,13 @@
 	},
 	"scripts": {
 		"vscode:prepublish": "pnpm run build",
-		"build": "concurrently \"pnpm run build:ext\" \"pnpm run build:css\"",
-		"watch": "concurrently \"pnpm run watch:ext\" \"pnpm run watch:css\"",
+		"build": "concurrently \"pnpm run build:ext\" \"pnpm run build:css\" \"pnpm run build:hljs\"",
+		"watch": "concurrently \"pnpm run watch:ext\" \"pnpm run watch:css\" \"pnpm run build:hljs\"",
 		"build:ext": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
 		"watch:ext": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
 		"build:css": "tailwindcss -i ./src/styles.css -o ./media/chat-panel.css --minify",
 		"watch:css": "tailwindcss -i ./src/styles.css -o ./media/chat-panel.css --watch",
+		"build:hljs": "node scripts/build-hljs.mjs",
 		"lint": "eslint src --ext ts"
 	},
 	"devDependencies": {
@@ -176,6 +177,7 @@
 		"concurrently": "^8.2.2",
 		"esbuild": "^0.28.1",
 		"eslint": "^10.1.0",
+		"highlight.js": "^11.11.1",
 		"postcss": "^8.4.38",
 		"tailwindcss": "^3.4.4",
 		"typescript": "^5.3.0"
