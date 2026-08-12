@@ -937,6 +937,9 @@
 	function highlightCodeBlocks(root) {
 		if (typeof hljs === 'undefined' || !root) return;
 		root.querySelectorAll('pre code').forEach(block => {
+			const langClass = [...block.classList].find(c => c.startsWith('language-'));
+			const lang = langClass ? langClass.slice('language-'.length) : null;
+			if (lang && !hljs.getLanguage(lang)) return;
 			hljs.highlightElement(block);
 		});
 	}
