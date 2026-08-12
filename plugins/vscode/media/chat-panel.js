@@ -949,7 +949,10 @@
 
 		update(text) {
 			if (typeof marked === 'undefined') return;
-			const tokens = marked.lexer(text);
+			// skip 'space' tokens (blank lines between blocks) - rendering one
+			// leaves an empty block that adds a stray gap and can steal the
+			// cursor's anchor mid-stream
+			const tokens = marked.lexer(text).filter(t => t.type !== 'space');
 			for (let i = 0; i < tokens.length; i++) {
 				const raw = tokens[i].raw;
 				if (this.blocks[i] && this.blocks[i].raw === raw) continue;
